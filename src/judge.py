@@ -17,6 +17,7 @@ def main():
 
     out_path = OUT / "judge_scores.jsonl"
     done = {(r["desc_id"], r["judge"]) for r in read_jsonl(out_path)}
+    failed = []
 
     for d in descs:
         art = artworks.loc[d["artwork_id"]]
@@ -28,7 +29,12 @@ def main():
             if (d["desc_id"], j["name"]) in done:
                 continue
             print(f"[채점] {d['desc_id']} ← {j['name']}")
-            raw = call_model(j["provider"], j["model"], prompt, image, mime, 0.0, cfg["max_tokens"])
+            try:
+                raw = call_model(j["provider"], j["model"], prompt, image, mime, 0.0, cfg["max_tokens"])
+            except Exception as e:  # 한 판정 모델이 실패해도 나머지는 계속 진행
+                print(f"  ✗ 건너뜀: {str(e)[:150]}")
+                failed.append((d["desc_id"], j["name"]))
+                continue
             try:
                 scores = parse_json(raw)
             except ValueError as e:
@@ -45,6 +51,10 @@ def main():
                 row["raw"] = scores["raw"]
             append_jsonl(out_path, row)
     print(f"완료 → {out_path}")
+    if failed:
+        print(f"\n실패해서 건너뛴 것 {len(failed)}개 (잠시 뒤 같은 명령을 다시 실행하면 이것만 다시 시도해요):")
+        for k in failed:
+            print("  -", " ← ".join(k))
 
 
 if __name__ == "__main__":
