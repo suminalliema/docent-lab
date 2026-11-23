@@ -25,6 +25,9 @@ def main():
     failed = []
 
     for _, art in artworks.iterrows():
+        if not (DATA / art["image_path"]).exists():  # 아직 안 받은 그림은 건너뜀
+            print(f"⚠ 이미지 없음, 건너뜀: {art['image_path']}")
+            continue
         image, mime = read_image(art["image_path"])
         for prompt_name in cfg["prompts"]:
             prompt = load_prompt(prompt_name).format(
