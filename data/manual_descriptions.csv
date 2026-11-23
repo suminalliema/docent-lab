@@ -1,0 +1,2 @@
+artwork_id,generator,model,prompt,description
+sample-001,chatgpt-web,ChatGPT 무료 플랜,generate_v2_guided,"웹 채팅에서 받은 해설을 여기에 붙여넣기 (줄바꿈·쉼표가 있으면 큰따옴표로 감싸기)"

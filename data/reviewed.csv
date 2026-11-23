@@ -1,0 +1,2 @@
+artwork_id,desc_id,final_text,short_alt,reviewer,reviewed_at,status
+sample-001,sample-001__claude__generate_v2_guided,검수하고 고친 최종 해설 본문,한 문장짜리 이미지 대체텍스트,R1,2026-12-01,draft

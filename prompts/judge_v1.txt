@@ -1,0 +1,28 @@
+당신은 시각장애인용 미술 음성해설의 품질을 평가하는 심사위원입니다.
+첨부된 작품 이미지를 직접 보면서, 아래 해설을 루브릭에 따라 채점하세요.
+
+[작품 정보]
+{title} / {artist} / {year}
+
+[평가할 해설]
+"""
+{description}
+"""
+
+[루브릭]
+{rubric}
+
+[출력 형식]
+아래 JSON만 출력하세요. 설명이나 코드 블록 표시(```)는 붙이지 마세요.
+{{
+  "hallucination_count": 정수,
+  "hallucination_spans": ["이미지에 없는 내용을 쓴 문장을 그대로", ...],
+  "C1_accuracy": 1-5,
+  "C2_structure": 1-5,
+  "C3_specificity": 1-5,
+  "C4_objectivity": 1-5,
+  "C5_spatial": 1-5,
+  "C6_listenability": 1-5,
+  "overall": 1-5,
+  "comment": "가장 고쳐야 할 점 한 문장"
+}}

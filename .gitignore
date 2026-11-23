@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+.DS_Store
+outputs/site_preview/
+data/human_scores/
+outputs/human_sheet_*.csv

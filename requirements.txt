@@ -1,0 +1,11 @@
+openai
+anthropic
+google-genai
+pandas
+numpy
+scipy
+scikit-learn
+pyyaml
+python-dotenv
+tabulate
+ollama
