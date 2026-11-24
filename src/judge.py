@@ -2,6 +2,8 @@
 
     python src/judge.py
 """
+import json
+
 import pandas as pd
 
 from common import (DailyQuotaExceeded, CRITERIA, DATA, OUT, ROOT, append_jsonl, call_model, load_config,
@@ -16,7 +18,24 @@ def main():
     descs = read_jsonl(OUT / "descriptions.jsonl")
 
     out_path = OUT / "judge_scores.jsonl"
-    done = {(r["desc_id"], r["judge"]) for r in read_jsonl(out_path)}
+    rows, repaired, dropped = [], 0, 0
+    for r in read_jsonl(out_path):
+        if r.get("raw") and r.get("overall") is None:  # 예전에 형식 오류로 점수를 못 읽은 행
+            try:
+                fixed = parse_json(r["raw"])
+                r.update({k: fixed.get(k) for k in CRITERIA + ["hallucination_count", "hallucination_spans", "comment"]})
+                r.pop("raw", None)
+                repaired += 1
+            except ValueError:
+                dropped += 1  # 그래도 못 읽으면 지우고 이번에 다시 채점
+                continue
+        rows.append(r)
+    if repaired or dropped:
+        with open(out_path, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        print(f"형식 오류였던 채점: {repaired}개 복구, {dropped}개 다시 채점")
+    done = {(r["desc_id"], r["judge"]) for r in rows}
     failed = []
     exhausted = set()  # 오늘 하루 한도를 다 쓴 모델
 

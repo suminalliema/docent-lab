@@ -2,6 +2,7 @@
 
 모델 이름과 프롬프트를 가리고(블라인드) 순서를 섞어서, 평가자마다 같은 시트를 줍니다.
 CSV를 구글 시트에 올려 팀원(그리고 동의한 당사자 평가자)이 채점합니다.
+image 칸의 =IMAGE(...) 수식 덕분에 구글 시트에서 그림이 셀 안에 바로 보입니다.
 
     python src/make_human_sheet.py --raters R1 R2 R3
 
@@ -24,9 +25,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--raters", nargs="+", required=True)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--prompt", default=None, help="이 프롬프트로 만든 해설만 넣기 (예: generate_v2_guided)")
+    ap.add_argument("--repo", default="suminalliema/docent-lab", help="이미지를 불러올 공개 GitHub 레포")
     args = ap.parse_args()
 
     descs = read_jsonl(OUT / "descriptions.jsonl")
+    if args.prompt:
+        descs = [d for d in descs if d["prompt"] == args.prompt]
     artworks = pd.read_csv(DATA / "artworks.csv").fillna("").set_index("id")
     rng = random.Random(args.seed)
     rng.shuffle(descs)
@@ -36,8 +41,10 @@ def main():
         blind_id = f"D{i:03d}"
         key.append({"blind_id": blind_id, "desc_id": d["desc_id"]})
         art = artworks.loc[d["artwork_id"]]
+        url = f"https://raw.githubusercontent.com/{args.repo}/main/data/{art['image_path']}"
         row = {"blind_id": blind_id, "artwork_id": d["artwork_id"], "title": art["title"],
-               "image_path": art["image_path"], "description": d["description"],
+               "image": f'=IMAGE("{url}")',  # 구글 시트에 올리면 그림이 셀 안에 보여요
+               "image_url": url, "description": d["description"],
                "hallucination_count": "", "hallucination_spans": ""}
         row.update({c: "" for c in CRITERIA})
         row["comment"] = ""

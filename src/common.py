@@ -169,7 +169,17 @@ def parse_json(text: str) -> dict:
     m = re.search(r"\{.*\}", text, flags=re.S)
     if not m:
         raise ValueError(f"JSON을 찾지 못함: {text[:200]}")
-    return json.loads(m.group(0))
+    raw = m.group(0)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # 모델이 자주 하는 실수 고치기: \' 같은 잘못된 이스케이프, 닫는 괄호 앞의 쉼표
+        fixed = raw.replace("\\'", "'")
+        fixed = re.sub(r",\s*([}\]])", r"\1", fixed)
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"JSON 해석 실패: {e}") from e
 
 
 def append_jsonl(path: Path, row: dict) -> None:
