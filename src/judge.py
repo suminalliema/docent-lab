@@ -4,7 +4,7 @@
 """
 import pandas as pd
 
-from common import (CRITERIA, DATA, OUT, ROOT, append_jsonl, call_model, load_config,
+from common import (DailyQuotaExceeded, CRITERIA, DATA, OUT, ROOT, append_jsonl, call_model, load_config,
                     load_prompt, parse_json, read_image, read_jsonl)
 
 
@@ -18,6 +18,7 @@ def main():
     out_path = OUT / "judge_scores.jsonl"
     done = {(r["desc_id"], r["judge"]) for r in read_jsonl(out_path)}
     failed = []
+    exhausted = set()  # 오늘 하루 한도를 다 쓴 모델
 
     for d in descs:
         art = artworks.loc[d["artwork_id"]]
@@ -28,9 +29,17 @@ def main():
         for j in cfg["judges"]:
             if (d["desc_id"], j["name"]) in done:
                 continue
+            if (j["provider"], j["model"]) in exhausted:
+                failed.append((d["desc_id"], j["name"]))
+                continue
             print(f"[채점] {d['desc_id']} ← {j['name']}")
             try:
                 raw = call_model(j["provider"], j["model"], prompt, image, mime, 0.0, cfg["max_tokens"])
+            except DailyQuotaExceeded as e:
+                print(f"  ✗ {e} → 오늘은 이 판정 모델을 건너뛰어요")
+                exhausted.add((j["provider"], j["model"]))
+                failed.append((d["desc_id"], j["name"]))
+                continue
             except Exception as e:  # 한 판정 모델이 실패해도 나머지는 계속 진행
                 print(f"  ✗ 건너뜀: {str(e)[:150]}")
                 failed.append((d["desc_id"], j["name"]))

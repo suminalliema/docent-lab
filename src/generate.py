@@ -7,7 +7,7 @@ import argparse
 
 import pandas as pd
 
-from common import DATA, OUT, append_jsonl, call_model, load_config, load_prompt, read_image, read_jsonl
+from common import DailyQuotaExceeded, DATA, OUT, append_jsonl, call_model, load_config, load_prompt, read_image, read_jsonl
 
 
 def main():
@@ -23,6 +23,7 @@ def main():
     out_path = OUT / "descriptions.jsonl"
     done = {(r["artwork_id"], r["generator"], r["prompt"]) for r in read_jsonl(out_path)}
     failed = []
+    exhausted = set()  # 오늘 하루 한도를 다 쓴 모델
 
     for _, art in artworks.iterrows():
         if not (DATA / art["image_path"]).exists():  # 아직 안 받은 그림은 건너뜀
@@ -36,10 +37,18 @@ def main():
                 key = (art["id"], g["name"], prompt_name)
                 if key in done:
                     continue
+                if (g["provider"], g["model"]) in exhausted:
+                    failed.append(key)
+                    continue
                 print(f"[생성] {art['id']} / {g['name']} / {prompt_name}")
                 try:
                     text = call_model(g["provider"], g["model"], prompt, image, mime,
                                       cfg["temperature"], cfg["max_tokens"])
+                except DailyQuotaExceeded as e:
+                    print(f"  ✗ {e} → 오늘은 이 모델을 건너뛰어요")
+                    exhausted.add((g["provider"], g["model"]))
+                    failed.append(key)
+                    continue
                 except Exception as e:  # 한 모델이 실패해도 나머지는 계속 진행
                     print(f"  ✗ 건너뜀: {str(e)[:150]}")
                     failed.append(key)

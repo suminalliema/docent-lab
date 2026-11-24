@@ -42,6 +42,19 @@ def read_image(path: str | Path) -> tuple[bytes, str]:
 _LAST_CALL: dict[str, float] = {}
 
 
+class DailyQuotaExceeded(Exception):
+    """무료 등급의 하루 요청 한도를 다 쓴 경우. 재시도해도 소용없으므로 바로 알립니다."""
+
+
+# 다시 시도해도 결과가 같은 오류들 (재시도하지 않고 바로 건너뜀)
+_NO_RETRY = ["exceeds the available context", "INVALID_ARGUMENT", "API key not valid",
+             "PERMISSION_DENIED", "not found"]
+
+# 응답이 이 시간(초) 안에 안 오면 포기하고 재시도합니다. 네트워크가 끊겨 무한정 멈추는 것을 막습니다.
+CLOUD_TIMEOUT = 180   # Gemini / OpenAI / Anthropic
+LOCAL_TIMEOUT = 600   # 내 맥의 Ollama 모델 (느릴 수 있어서 넉넉하게)
+
+
 def _wait_rate_limit(provider: str) -> None:
     """무료 등급의 분당 요청 한도를 넘지 않도록 provider마다 호출 간격을 둡니다 (config.yaml의 min_interval_sec)."""
     gap = (load_config().get("min_interval_sec") or {}).get(provider, 0)
@@ -68,8 +81,11 @@ def call_model(provider: str, model: str, prompt: str, image: bytes, mime: str,
             raise ValueError(f"알 수 없는 provider: {provider}")
         except ValueError:
             raise
-        except Exception as e:  # 네트워크·rate limit 등은 잠깐 쉬고 재시도
-            if attempt == retries - 1:
+        except Exception as e:  # 네트워크·일시적 과부하 등은 잠깐 쉬고 재시도
+            msg = str(e)
+            if "PerDay" in msg or "per day" in msg:
+                raise DailyQuotaExceeded(f"{provider}/{model} 하루 무료 한도 초과") from e
+            if any(k in msg for k in _NO_RETRY) or attempt == retries - 1:
                 raise
             wait = 2 ** attempt * 10  # 429(한도 초과)면 점점 길게 쉼
             print(f"  ! {provider}/{model} 오류: {e} → {wait}초 후 재시도")
@@ -80,17 +96,20 @@ def call_model(provider: str, model: str, prompt: str, image: bytes, mime: str,
 def _ollama(model, prompt, image, temperature, max_tokens):
     """내 맥에서 돌리는 오픈소스 모델 (Ollama 앱이 켜져 있어야 함). 무료."""
     import ollama
-    resp = ollama.chat(
+    client = ollama.Client(timeout=LOCAL_TIMEOUT)
+    resp = client.chat(
         model=model,
         messages=[{"role": "user", "content": prompt, "images": [image]}],
-        options={"temperature": temperature, "num_predict": max_tokens},
+        # num_ctx: 한 번에 받을 수 있는 토큰 수. 기본 4096은 그림 한 장만으로도 넘칠 수 있어서 늘립니다.
+        options={"temperature": temperature, "num_predict": max_tokens,
+                 "num_ctx": load_config().get("ollama_num_ctx", 12288)},
     )
     return resp["message"]["content"].strip()
 
 
 def _openai(model, prompt, image, mime, temperature, max_tokens):
     from openai import OpenAI
-    client = OpenAI()  # OPENAI_API_KEY
+    client = OpenAI(timeout=CLOUD_TIMEOUT)  # OPENAI_API_KEY
     b64 = base64.b64encode(image).decode()
     kwargs = dict(model=model, max_completion_tokens=max_tokens, temperature=temperature)
     messages = [{
@@ -113,7 +132,7 @@ def _openai(model, prompt, image, mime, temperature, max_tokens):
 
 def _anthropic(model, prompt, image, mime, temperature, max_tokens):
     import anthropic
-    client = anthropic.Anthropic()  # ANTHROPIC_API_KEY
+    client = anthropic.Anthropic(timeout=CLOUD_TIMEOUT)  # ANTHROPIC_API_KEY
     b64 = base64.b64encode(image).decode()
     resp = client.messages.create(
         model=model,
@@ -133,7 +152,7 @@ def _anthropic(model, prompt, image, mime, temperature, max_tokens):
 def _google(model, prompt, image, mime, temperature, max_tokens):
     from google import genai
     from google.genai import types
-    client = genai.Client()  # GEMINI_API_KEY
+    client = genai.Client(http_options=types.HttpOptions(timeout=CLOUD_TIMEOUT * 1000))  # GEMINI_API_KEY (밀리초)
     resp = client.models.generate_content(
         model=model,
         contents=[types.Part.from_bytes(data=image, mime_type=mime), prompt],
