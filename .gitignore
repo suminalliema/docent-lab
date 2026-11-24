@@ -5,3 +5,4 @@ __pycache__/
 outputs/site_preview/
 data/human_scores/
 outputs/human_sheet_*.csv
+outputs/human_key.csv
