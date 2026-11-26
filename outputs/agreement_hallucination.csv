@@ -1,0 +1,3 @@
+﻿judge,human_positive,precision,recall,f1
+gemini-judge,31,0.76,0.6129032258064516,0.6785714285714286
+gemma-judge,31,0.0,0.0,0.0
